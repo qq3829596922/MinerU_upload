@@ -2,6 +2,7 @@
 import copy
 import json
 import os
+import time
 from pathlib import Path
 
 from loguru import logger
@@ -237,7 +238,47 @@ if __name__ == '__main__':
     # os.environ['MINERU_MODEL_SOURCE'] = "modelscope"
 
     """Use pipeline mode if your environment does not support VLM"""
-    parse_doc(doc_path_list, output_dir, backend="pipeline")
+    
+    # 记录处理的文件列表
+    logger.info(f"准备处理 {len(doc_path_list)} 个文件:")
+    for doc_path in doc_path_list:
+        logger.info(f"  - {doc_path.name}")
+    
+    # 使用 txt 方法处理所有文件
+    logger.info("\n========== 开始使用 TXT 方法处理 PDF 文件 ==========")
+    txt_start_time = time.time()
+    txt_output_dir = os.path.join(output_dir, "txt_method")
+    parse_doc(doc_path_list, txt_output_dir, backend="pipeline", method="txt")
+    txt_end_time = time.time()
+    txt_elapsed_time = txt_end_time - txt_start_time
+    logger.info(f"TXT 方法处理完成，耗时: {txt_elapsed_time:.2f} 秒")
+    
+    # 使用 ocr 方法处理所有文件
+    logger.info("\n========== 开始使用 OCR 方法处理 PDF 文件 ==========")
+    ocr_start_time = time.time()
+    ocr_output_dir = os.path.join(output_dir, "ocr_method")
+    parse_doc(doc_path_list, ocr_output_dir, backend="pipeline", method="ocr")
+    ocr_end_time = time.time()
+    ocr_elapsed_time = ocr_end_time - ocr_start_time
+    logger.info(f"OCR 方法处理完成，耗时: {ocr_elapsed_time:.2f} 秒")
+    
+    # 输出时间对比结果
+    logger.info("\n========== 处理时间对比 ==========")
+    logger.info(f"TXT 方法耗时: {txt_elapsed_time:.2f} 秒")
+    logger.info(f"OCR 方法耗时: {ocr_elapsed_time:.2f} 秒")
+    if txt_elapsed_time > 0:
+        speedup_ratio = ocr_elapsed_time / txt_elapsed_time
+        logger.info(f"速度比较: OCR 方法是 TXT 方法的 {speedup_ratio:.2f} 倍时间")
+    
+    # 如果只有一个文件，计算单文件处理时间
+    if len(doc_path_list) == 1:
+        logger.info(f"\n单文件处理时间:")
+        logger.info(f"  TXT: {txt_elapsed_time:.2f} 秒")
+        logger.info(f"  OCR: {ocr_elapsed_time:.2f} 秒")
+    elif len(doc_path_list) > 1:
+        logger.info(f"\n平均每个文件处理时间:")
+        logger.info(f"  TXT: {txt_elapsed_time/len(doc_path_list):.2f} 秒/文件")
+        logger.info(f"  OCR: {ocr_elapsed_time/len(doc_path_list):.2f} 秒/文件")
 
     """To enable VLM mode, change the backend to 'vlm-xxx'"""
     # parse_doc(doc_path_list, output_dir, backend="vlm-transformers")  # more general.

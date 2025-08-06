@@ -9,6 +9,10 @@ import pypdfium2 as pdfium
 from loguru import logger
 
 from mineru.data.data_reader_writer import FileBasedDataWriter
+try:
+    from mineru.data.data_reader_writer import COSDataWriter
+except ImportError:
+    COSDataWriter = None
 from mineru.utils.draw_bbox import draw_layout_bbox, draw_span_bbox
 from mineru.utils.enum_class import MakeMode
 from mineru.utils.pdf_image_tools import images_bytes_to_pdf_bytes
@@ -39,6 +43,37 @@ def prepare_env(output_dir, pdf_file_name, parse_method):
     os.makedirs(local_image_dir, exist_ok=True)
     os.makedirs(local_md_dir, exist_ok=True)
     return local_image_dir, local_md_dir
+
+
+def create_image_writer(local_image_dir, pdf_file_name=None):
+    """创建图片写入器，如果配置了 COS 则使用 COSDataWriter"""
+    # 检查是否启用 COS
+    if COSDataWriter and os.environ.get('MINERU_ENABLE_COS', '').lower() == 'true':
+        try:
+            # 从环境变量或配置文件获取 COS 配置
+            cos_config_path = os.environ.get('MINERU_COS_CONFIG', 'config/cos_config.json')
+            if os.path.exists(cos_config_path):
+                import json
+                with open(cos_config_path, 'r') as f:
+                    config = json.load(f)
+                    cos_config = config.get('cos', {})
+                    
+                if cos_config.get('enable_upload', False):
+                    logger.info("Using COSDataWriter for automatic image upload")
+                    return COSDataWriter(
+                        parent_dir=local_image_dir,
+                        secret_id=cos_config.get('secret_id'),
+                        secret_key=cos_config.get('secret_key'),
+                        region=cos_config.get('region', 'ap-guangzhou'),
+                        bucket=cos_config.get('bucket'),
+                        cos_prefix=cos_config.get('prefix', 'mineru/'),
+                        enable_upload=True
+                    )
+        except Exception as e:
+            logger.warning(f"Failed to initialize COSDataWriter: {e}")
+    
+    # 默认使用 FileBasedDataWriter
+    return FileBasedDataWriter(local_image_dir)
 
 
 def convert_pdf_bytes_to_bytes_by_pypdfium2(pdf_bytes, start_page_id=0, end_page_id=None):
@@ -188,7 +223,8 @@ def _process_pipeline(
         model_json = copy.deepcopy(model_list)
         pdf_file_name = pdf_file_names[idx]
         local_image_dir, local_md_dir = prepare_env(output_dir, pdf_file_name, parse_method)
-        image_writer, md_writer = FileBasedDataWriter(local_image_dir), FileBasedDataWriter(local_md_dir)
+        image_writer = create_image_writer(local_image_dir, pdf_file_name)
+        md_writer = FileBasedDataWriter(local_md_dir)
 
         images_list = all_image_lists[idx]
         pdf_doc = all_pdf_docs[idx]
@@ -236,7 +272,8 @@ async def _async_process_vlm(
     for idx, pdf_bytes in enumerate(pdf_bytes_list):
         pdf_file_name = pdf_file_names[idx]
         local_image_dir, local_md_dir = prepare_env(output_dir, pdf_file_name, parse_method)
-        image_writer, md_writer = FileBasedDataWriter(local_image_dir), FileBasedDataWriter(local_md_dir)
+        image_writer = create_image_writer(local_image_dir, pdf_file_name)
+        md_writer = FileBasedDataWriter(local_md_dir)
 
         middle_json, infer_result = await aio_vlm_doc_analyze(
             pdf_bytes, image_writer=image_writer, backend=backend, server_url=server_url, **kwargs,
@@ -277,7 +314,8 @@ def _process_vlm(
     for idx, pdf_bytes in enumerate(pdf_bytes_list):
         pdf_file_name = pdf_file_names[idx]
         local_image_dir, local_md_dir = prepare_env(output_dir, pdf_file_name, parse_method)
-        image_writer, md_writer = FileBasedDataWriter(local_image_dir), FileBasedDataWriter(local_md_dir)
+        image_writer = create_image_writer(local_image_dir, pdf_file_name)
+        md_writer = FileBasedDataWriter(local_md_dir)
 
         middle_json, infer_result = vlm_doc_analyze(
             pdf_bytes, image_writer=image_writer, backend=backend, server_url=server_url, **kwargs,

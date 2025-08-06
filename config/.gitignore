@@ -1,0 +1,4 @@
+# 忽略包含敏感信息的配置文件
+cos_config.json
+*.secret.json
+*_prod.json
