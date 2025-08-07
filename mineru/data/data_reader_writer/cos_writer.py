@@ -39,6 +39,15 @@ class COSDataWriter(FileBasedDataWriter):
         """
         super().__init__(parent_dir)
         
+        logger.info(f"COSDataWriter.__init__ called with:")
+        logger.info(f"  parent_dir: {parent_dir}")
+        logger.info(f"  secret_id: {'***' if secret_id else 'None'}")
+        logger.info(f"  secret_key: {'***' if secret_key else 'None'}")
+        logger.info(f"  region: {region}")
+        logger.info(f"  bucket: {bucket}")
+        logger.info(f"  cos_prefix: {cos_prefix}")
+        logger.info(f"  enable_upload: {enable_upload}")
+        
         self.enable_upload = enable_upload
         self.cos_prefix = cos_prefix.rstrip('/') + '/'
         self.region = region  # 保存 region
@@ -48,6 +57,10 @@ class COSDataWriter(FileBasedDataWriter):
             self.secret_id = secret_id or os.environ.get('COS_SECRET_ID')
             self.secret_key = secret_key or os.environ.get('COS_SECRET_KEY')
             self.bucket = bucket or os.environ.get('COS_BUCKET')
+            
+            logger.info(f"  Final secret_id: {'***' if self.secret_id else 'None'}")
+            logger.info(f"  Final secret_key: {'***' if self.secret_key else 'None'}")
+            logger.info(f"  Final bucket: {self.bucket}")
             
             if not all([self.secret_id, self.secret_key, self.bucket]):
                 logger.warning("COS credentials not complete, upload disabled")
@@ -60,7 +73,7 @@ class COSDataWriter(FileBasedDataWriter):
                     SecretKey=self.secret_key
                 )
                 self.cos_client = CosS3Client(config)
-                logger.info(f"COS client initialized for bucket: {self.bucket}")
+                logger.info(f"COS client initialized successfully for bucket: {self.bucket}")
     
     def write(self, path: str, data: bytes) -> Optional[str]:
         """
@@ -73,11 +86,15 @@ class COSDataWriter(FileBasedDataWriter):
         Returns:
             COS URL 如果上传成功，否则返回 None
         """
+        logger.info(f"COSDataWriter.write called with path: {path}, data size: {len(data)} bytes")
+        
         # 先写入本地
         super().write(path, data)
+        logger.info(f"File written to local path: {path}")
         
         # 如果启用了上传，则上传到 COS
         if self.enable_upload:
+            logger.info("COS upload is enabled, starting upload...")
             try:
                 # 构建 COS 对象键
                 # 如果是绝对路径，只取文件名
@@ -85,6 +102,9 @@ class COSDataWriter(FileBasedDataWriter):
                     cos_key = self.cos_prefix + os.path.basename(path)
                 else:
                     cos_key = self.cos_prefix + path.replace('\\', '/')
+                
+                logger.info(f"COS key: {cos_key}")
+                logger.info(f"Uploading to bucket: {self.bucket}")
                 
                 # 上传到 COS
                 response = self.cos_client.put_object(
@@ -94,15 +114,19 @@ class COSDataWriter(FileBasedDataWriter):
                     EnableMD5=True
                 )
                 
+                logger.info(f"COS upload response: {response}")
+                
                 # 构建访问 URL
                 cos_url = f"https://{self.bucket}.cos.{self.region}.myqcloud.com/{cos_key}"
                 
-                logger.info(f"Uploaded to COS: {cos_url}")
+                logger.info(f"Successfully uploaded to COS: {cos_url}")
                 return cos_url
                 
             except Exception as e:
-                logger.error(f"Failed to upload to COS: {e}")
+                logger.error(f"Failed to upload to COS: {e}", exc_info=True)
                 return None
+        else:
+            logger.info("COS upload is disabled")
         
         return None
     

@@ -1,5 +1,55 @@
 # Claude Work 工作内容记录
 
+## [2025-08-07] Docker 容器化与 API 部署
+- **功能1**：创建多种 Docker 镜像支持不同部署场景
+- **功能2**：配置 docker-compose 支持一键部署
+- **功能3**：集成 COS 自动上传到容器环境
+
+### 核心代码示例
+
+#### Dockerfile 配置
+```dockerfile
+# Dockerfile - 基础 API 服务镜像
+FROM python:3.11-slim-bullseye
+
+# 安装 PyTorch CPU 版本
+RUN pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+# 安装 MinerU 和 API 依赖
+RUN pip install -e . && pip install uvicorn fastapi cos-python-sdk-v5
+
+# 配置 COS 环境变量
+ENV MINERU_ENABLE_COS=true
+ENV MINERU_COS_CONFIG=/app/config/cos_config.json
+```
+
+#### docker-compose 配置
+```yaml
+# docker-compose.yml
+services:
+  mineru-api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config:/app/config
+      - ./uploads:/app/uploads
+    environment:
+      - MINERU_ENABLE_COS=true
+    command: python -m mineru.api --host 0.0.0.0 --port 8000
+```
+
+#### API 启动脚本
+```bash
+# run_api_with_cos.sh
+#!/bin/bash
+export MINERU_ENABLE_COS=true
+export MINERU_COS_CONFIG="config/cos_config.json"
+python -m mineru.api --host 0.0.0.0 --port 8000
+```
+
+---
+
 ## [2025-08-06] MinerU 集成腾讯云 COS 自动上传
 - **功能1**：修改 MinerU 源码支持自动上传
 - **功能2**：通过环境变量控制是否启用 COS

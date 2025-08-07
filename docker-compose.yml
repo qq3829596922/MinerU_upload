@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  mineru-api:
+    # 使用已有的官方镜像
+    image: mineru-sglang:latest
+    container_name: mineru-api-cos
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      # 挂载配置文件
+      - ./config/cos_config.json:/app/config/cos_config.json:ro
+      
+      # 挂载修改后的代码文件（覆盖镜像中的文件）
+      - ./mineru/cli/common.py:/app/mineru/cli/common.py:ro
+      - ./mineru/data/data_reader_writer/__init__.py:/app/mineru/data/data_reader_writer/__init__.py:ro
+      - ./mineru/data/data_reader_writer/cos_writer.py:/app/mineru/data/data_reader_writer/cos_writer.py:ro
+      
+      # 输出目录
+      - ./output:/app/output
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+      
+    environment:
+      # 启用 COS
+      - MINERU_ENABLE_COS=true
+      - MINERU_COS_CONFIG=/app/config/cos_config.json
+      - MINERU_MODEL_SOURCE=local
+      - PYTHONPATH=/app
+      
+    # 安装 COS SDK 后启动 API
+    entrypoint: bash
+    command:
+      - -c
+      - |
+        echo "Installing COS SDK..." && \
+        pip install --break-system-packages -i https://pypi.tuna.tsinghua.edu.cn/simple cos-python-sdk-v5 && \
+        echo "Copying COS writer to package directory..." && \
+        cp /app/mineru/data/data_reader_writer/cos_writer.py /usr/local/lib/python3.12/dist-packages/mineru/data/data_reader_writer/ && \
+        cp /app/mineru/data/data_reader_writer/__init__.py /usr/local/lib/python3.12/dist-packages/mineru/data/data_reader_writer/ && \
+        cp /app/mineru/cli/common.py /usr/local/lib/python3.12/dist-packages/mineru/cli/ && \
+        echo "Starting MinerU API with COS support..." && \
+        mineru-api --host 0.0.0.0 --port 8000
+    
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    
+    ipc: host
+    
+    networks:
+      - mineru-network
+
+networks:
+  mineru-network:
+    driver: bridge
+    name: mineru-cos-net

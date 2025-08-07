@@ -47,20 +47,33 @@ def prepare_env(output_dir, pdf_file_name, parse_method):
 
 def create_image_writer(local_image_dir, pdf_file_name=None):
     """创建图片写入器，如果配置了 COS 则使用 COSDataWriter"""
+    logger.info(f"create_image_writer called with local_image_dir={local_image_dir}, pdf_file_name={pdf_file_name}")
+    logger.info(f"COSDataWriter available: {COSDataWriter is not None}")
+    logger.info(f"MINERU_ENABLE_COS: {os.environ.get('MINERU_ENABLE_COS', 'not set')}")
+    
     # 检查是否启用 COS
     if COSDataWriter and os.environ.get('MINERU_ENABLE_COS', '').lower() == 'true':
         try:
             # 从环境变量或配置文件获取 COS 配置
             cos_config_path = os.environ.get('MINERU_COS_CONFIG', 'config/cos_config.json')
+            logger.info(f"COS config path: {cos_config_path}")
+            logger.info(f"Config file exists: {os.path.exists(cos_config_path)}")
+            
             if os.path.exists(cos_config_path):
                 import json
                 with open(cos_config_path, 'r') as f:
                     config = json.load(f)
                     cos_config = config.get('cos', {})
+                    logger.info(f"COS config loaded: {list(cos_config.keys())}")
+                    logger.info(f"enable_upload: {cos_config.get('enable_upload', False)}")
                     
                 if cos_config.get('enable_upload', False):
-                    logger.info("Using COSDataWriter for automatic image upload")
-                    return COSDataWriter(
+                    logger.info("Creating COSDataWriter for automatic image upload")
+                    logger.info(f"COS bucket: {cos_config.get('bucket')}")
+                    logger.info(f"COS region: {cos_config.get('region')}")
+                    logger.info(f"COS prefix: {cos_config.get('prefix')}")
+                    
+                    cos_writer = COSDataWriter(
                         parent_dir=local_image_dir,
                         secret_id=cos_config.get('secret_id'),
                         secret_key=cos_config.get('secret_key'),
@@ -69,10 +82,22 @@ def create_image_writer(local_image_dir, pdf_file_name=None):
                         cos_prefix=cos_config.get('prefix', 'mineru/'),
                         enable_upload=True
                     )
+                    logger.info("COSDataWriter created successfully")
+                    return cos_writer
+                else:
+                    logger.info("COS is configured but enable_upload is False")
+            else:
+                logger.warning(f"COS config file not found at {cos_config_path}")
         except Exception as e:
-            logger.warning(f"Failed to initialize COSDataWriter: {e}")
+            logger.error(f"Failed to initialize COSDataWriter: {e}", exc_info=True)
+    else:
+        if not COSDataWriter:
+            logger.info("COSDataWriter not available (import failed)")
+        if not os.environ.get('MINERU_ENABLE_COS', '').lower() == 'true':
+            logger.info("MINERU_ENABLE_COS not set to true")
     
     # 默认使用 FileBasedDataWriter
+    logger.info("Using default FileBasedDataWriter")
     return FileBasedDataWriter(local_image_dir)
 
 
