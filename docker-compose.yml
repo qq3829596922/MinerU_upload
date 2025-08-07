@@ -1,9 +1,7 @@
-version: '3.8'
-
 services:
   mineru-api:
-    # 使用已有的官方镜像
-    image: mineru-sglang:latest
+    # 使用官方 MinerU 镜像
+    image: opendatalab/mineru:latest
     container_name: mineru-api-cos
     restart: unless-stopped
     ports:
@@ -35,13 +33,13 @@ services:
       - -c
       - |
         echo "Installing COS SDK..." && \
-        pip install --break-system-packages -i https://pypi.tuna.tsinghua.edu.cn/simple cos-python-sdk-v5 && \
+        pip install -i https://pypi.tuna.tsinghua.edu.cn/simple cos-python-sdk-v5 && \
         echo "Copying COS writer to package directory..." && \
-        cp /app/mineru/data/data_reader_writer/cos_writer.py /usr/local/lib/python3.12/dist-packages/mineru/data/data_reader_writer/ && \
-        cp /app/mineru/data/data_reader_writer/__init__.py /usr/local/lib/python3.12/dist-packages/mineru/data/data_reader_writer/ && \
-        cp /app/mineru/cli/common.py /usr/local/lib/python3.12/dist-packages/mineru/cli/ && \
+        cp /app/mineru/data/data_reader_writer/cos_writer.py /opt/mineru/lib/python3.10/site-packages/mineru/data/data_reader_writer/ && \
+        cp /app/mineru/data/data_reader_writer/__init__.py /opt/mineru/lib/python3.10/site-packages/mineru/data/data_reader_writer/ && \
+        cp /app/mineru/cli/common.py /opt/mineru/lib/python3.10/site-packages/mineru/cli/ && \
         echo "Starting MinerU API with COS support..." && \
-        mineru-api --host 0.0.0.0 --port 8000
+        mineru api --host 0.0.0.0 --port 8000
     
     deploy:
       resources:
