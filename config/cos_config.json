@@ -1,0 +1,14 @@
+{
+  "cos": {
+    "secret_id": "AKIDQkuthIgvzqU7WjlaFhvwkLiutgFersle",
+    "secret_key": "nZEvU0ObbNwIUUXs55uZ1GI9nERSIxQg",
+    "bucket": "test-1324197875",
+    "region": "ap-guangzhou",
+    "prefix": "images/",
+    "enable_upload": true
+  },
+  "mineru": {
+    "api_url": "MinerU API 地址，默认 http://localhost:8000",
+    "output_dir": "本地输出目录，默认 ./output"
+  }
+}

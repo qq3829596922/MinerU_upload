@@ -23,9 +23,9 @@ RUN python3 -m pip install cos-python-sdk-v5 --break-system-packages
 RUN /bin/bash -c "mineru-models-download -s huggingface -m all"
 
 # Copy COS integration files
-COPY mineru/cli/common.py /usr/local/lib/python3.10/dist-packages/mineru/cli/common.py
-COPY mineru/data/data_reader_writer/__init__.py /usr/local/lib/python3.10/dist-packages/mineru/data/data_reader_writer/__init__.py
-COPY mineru/data/data_reader_writer/cos_writer.py /usr/local/lib/python3.10/dist-packages/mineru/data/data_reader_writer/cos_writer.py
+COPY mineru/cli/common.py /usr/local/lib/python3.12/dist-packages/mineru/cli/common.py
+COPY mineru/data/data_reader_writer/__init__.py /usr/local/lib/python3.12/dist-packages/mineru/data/data_reader_writer/__init__.py
+COPY mineru/data/data_reader_writer/cos_writer.py /usr/local/lib/python3.12/dist-packages/mineru/data/data_reader_writer/cos_writer.py
 
 # Set working directory
 WORKDIR /app
