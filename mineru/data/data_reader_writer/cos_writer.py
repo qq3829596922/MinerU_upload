@@ -8,6 +8,8 @@ from .filebase import FileBasedDataWriter
 from qcloud_cos import CosConfig
 from qcloud_cos import CosS3Client
 import logging
+from PIL import Image
+import io
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +80,7 @@ class COSDataWriter(FileBasedDataWriter):
     def write(self, path: str, data: bytes) -> Optional[str]:
         """
         写入文件并上传到 COS
+        本地保存原图和缩小图，COS只上传缩小图
         
         Args:
             path: 文件路径
@@ -88,15 +91,109 @@ class COSDataWriter(FileBasedDataWriter):
         """
         logger.info(f"COSDataWriter.write called with path: {path}, data size: {len(data)} bytes")
         
-        # 先写入本地
+        # 先写入本地原图
         super().write(path, data)
         logger.info(f"File written to local path: {path}")
         
-        # 如果启用了上传，则上传到 COS
+        # 检查是否为图片文件，如果是则在本地也保存缩小版本
+        file_ext = os.path.splitext(path)[1].lower()
+        resized_data = None  # 初始化变量
+        new_width = None
+        new_height = None
+        
+        if file_ext in ['.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp']:
+            try:
+                # 打开图片
+                img = Image.open(io.BytesIO(data))
+                
+                # 计算缩小后的尺寸（1/2大小）
+                new_width = img.width // 2
+                new_height = img.height // 2
+                
+                # 缩放图片
+                resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                
+                # 转换为字节数据
+                output_buffer = io.BytesIO()
+                save_format = 'JPEG' if file_ext in ['.jpg', '.jpeg'] else img.format
+                
+                if save_format == 'JPEG' and img.mode == 'RGBA':
+                    # 如果是RGBA模式的JPEG，转换为RGB
+                    img_rgb = Image.new('RGB', resized_img.size, (255, 255, 255))
+                    img_rgb.paste(resized_img, mask=resized_img.split()[3] if len(resized_img.split()) == 4 else None)
+                    img_rgb.save(output_buffer, format=save_format, quality=100, optimize=True)
+                else:
+                    resized_img.save(output_buffer, format=save_format, quality=100 if save_format == 'JPEG' else None)
+                
+                resized_data = output_buffer.getvalue()
+                
+                # 构建缩小图片的本地保存路径
+                # parent_dir 已经是 images 目录，需要在同级创建 resize_images
+                if self._parent_dir and 'images' in self._parent_dir:
+                    # 将 parent_dir 中的 images 替换为 resize_images
+                    resize_parent_dir = self._parent_dir.replace('images', 'resize_images')
+                    # 确保目录存在
+                    os.makedirs(resize_parent_dir, exist_ok=True)
+                    # 构建完整路径
+                    if os.path.isabs(path):
+                        resize_path = os.path.join(resize_parent_dir, os.path.basename(path))
+                    else:
+                        resize_path = os.path.join(resize_parent_dir, path)
+                else:
+                    # 其他情况的处理
+                    if 'images' in path:
+                        resize_path = path.replace('images', 'resize_images')
+                    else:
+                        resize_path = os.path.join('resize_images', os.path.basename(path))
+                
+                # 直接保存缩小图片到本地（不使用super().write避免路径重复处理）
+                with open(resize_path, 'wb') as f:
+                    f.write(resized_data)
+                logger.info(f"Resized image saved locally to: {resize_path}")
+                logger.info(f"Image resized from {img.width}x{img.height} to {new_width}x{new_height}")
+                
+            except Exception as e:
+                logger.debug(f"Failed to create resized version: {e}")
+        
+        # 如果启用了上传，则上传缩小的图片到 COS
         if self.enable_upload:
             logger.info("COS upload is enabled, starting upload...")
             try:
-                # 构建 COS 对象键
+                # 准备上传数据
+                upload_data = data
+                
+                # 如果是图片文件，使用已经生成的缩小版本
+                if file_ext in ['.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp']:
+                    # 如果之前成功生成了缩小版本，使用它
+                    if resized_data is not None:
+                        upload_data = resized_data
+                        logger.info(f"Using resized image for COS upload: {new_width}x{new_height}")
+                        logger.info(f"Data size changed from {len(data)} bytes to {len(upload_data)} bytes")
+                    else:
+                        # 如果之前没有成功生成缩小版本，现在生成
+                        try:
+                            img = Image.open(io.BytesIO(data))
+                            new_width = img.width // 2
+                            new_height = img.height // 2
+                            resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                            
+                            output_buffer = io.BytesIO()
+                            save_format = 'JPEG' if file_ext in ['.jpg', '.jpeg'] else img.format
+                            
+                            if save_format == 'JPEG' and img.mode == 'RGBA':
+                                img_rgb = Image.new('RGB', resized_img.size, (255, 255, 255))
+                                img_rgb.paste(resized_img, mask=resized_img.split()[3] if len(resized_img.split()) == 4 else None)
+                                img_rgb.save(output_buffer, format=save_format, quality=100, optimize=True)
+                            else:
+                                resized_img.save(output_buffer, format=save_format, quality=100 if save_format == 'JPEG' else None)
+                            
+                            upload_data = output_buffer.getvalue()
+                            logger.info(f"Image resized for COS: {img.width}x{img.height} -> {new_width}x{new_height}")
+                        except Exception as e:
+                            logger.debug(f"Failed to resize for COS, using original: {e}")
+                            upload_data = data
+                
+                # 构建 COS 对象键 - 保持原始路径不变
                 # 如果是绝对路径，只取文件名
                 if os.path.isabs(path):
                     cos_key = self.cos_prefix + os.path.basename(path)
@@ -106,10 +203,10 @@ class COSDataWriter(FileBasedDataWriter):
                 logger.info(f"COS key: {cos_key}")
                 logger.info(f"Uploading to bucket: {self.bucket}")
                 
-                # 上传到 COS
+                # 上传到 COS（使用处理后的数据）
                 response = self.cos_client.put_object(
                     Bucket=self.bucket,
-                    Body=data,
+                    Body=upload_data,  # 使用可能已缩放的数据
                     Key=cos_key,
                     EnableMD5=True
                 )

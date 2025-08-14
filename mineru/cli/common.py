@@ -40,7 +40,9 @@ def read_fn(path):
 def prepare_env(output_dir, pdf_file_name, parse_method):
     local_md_dir = str(os.path.join(output_dir, pdf_file_name, parse_method))
     local_image_dir = os.path.join(str(local_md_dir), "images")
+    local_resize_image_dir = os.path.join(str(local_md_dir), "resize_images")
     os.makedirs(local_image_dir, exist_ok=True)
+    os.makedirs(local_resize_image_dir, exist_ok=True)
     os.makedirs(local_md_dir, exist_ok=True)
     return local_image_dir, local_md_dir
 
@@ -96,9 +98,12 @@ def create_image_writer(local_image_dir, pdf_file_name=None):
         if not os.environ.get('MINERU_ENABLE_COS', '').lower() == 'true':
             logger.info("MINERU_ENABLE_COS not set to true")
     
-    # 默认使用 FileBasedDataWriter
-    logger.info("Using default FileBasedDataWriter")
-    return FileBasedDataWriter(local_image_dir)
+    # 默认使用 COSDataWriter（但禁用上传），这样可以生成缩小图片
+    logger.info("Using COSDataWriter with upload disabled for local resize functionality")
+    return COSDataWriter(
+        parent_dir=local_image_dir,
+        enable_upload=False  # 禁用上传，只生成本地缩小图片
+    )
 
 
 def convert_pdf_bytes_to_bytes_by_pypdfium2(pdf_bytes, start_page_id=0, end_page_id=None):
