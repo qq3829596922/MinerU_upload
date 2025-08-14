@@ -1,5 +1,28 @@
 # Claude Code 代码变更记录
 
+## [2025-08-14] 图片自动缩放与双重保存功能
+- **提交ID**: 85958d44
+- **修改文件**: 
+  - `mineru/cli/common.py`
+  - `mineru/data/data_reader_writer/cos_writer.py`
+- **主要变更**: 
+  - 本地同时保存原图和缩略图
+  - COS只上传缩略图节省存储
+  - 自动创建 resize_images 目录
+
+### 核心代码示例
+```python
+# COSDataWriter 现在会：
+# 1. 保存原图到 images/
+# 2. 生成并保存缩略图到 resize_images/ (1/2尺寸)
+# 3. COS只上传缩略图到原路径
+if file_ext in ['.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp']:
+    # 生成缩略图
+    new_width = img.width // 2
+    new_height = img.height // 2
+    resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+```
+
 ## [2025-08-07] 腾讯云 COS 自动上传功能
 - **提交ID**: 722f38d3
 - **修改文件**: 
